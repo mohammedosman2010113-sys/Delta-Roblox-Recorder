@@ -1,4 +1,4 @@
--- [[ Delta Recorder v12.0 - الدمج النهائي مع Terror-Hub ]]
+-- [[ Delta Recorder v13.0 - نسخة الجوال ]]
 -- صنع خصيصًا لأمر المستخدم
 
 local player = game.Players.LocalPlayer
@@ -17,72 +17,28 @@ local winsCount = 0
 local replaySpeed = 1
 local isPerformanceMode = false
 local removeObstacles = false
-local terrorHubLoaded = false
-local terrorHubWindow = nil
 
--- ===== نظام تحميل Terror-Hub =====
-local function loadTerrorHub()
-    if terrorHubLoaded then
-        if terrorHubWindow then
-            terrorHubWindow.Visible = not terrorHubWindow.Visible
-        end
-        return
-    end
-    
-    print("🌀 جاري تحميل Terror-Hub...")
-    
-    -- تحميل السكربت وتنفيذه
-    local success, err = pcall(function()
-        local hubScript = loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-Terror-hub-100012"))()
-        if hubScript then
-            terrorHubLoaded = true
-            print("✅ تم تحميل Terror-Hub بنجاح")
-            
-            -- محاولة العثور على نافذة Terror-Hub وربطها بالسرعة
-            task.wait(1) -- ننتظر قليلاً لتظهر النافذة
-            for _, gui in ipairs(player.PlayerGui:GetChildren()) do
-                if gui:IsA("ScreenGui") and gui.Name:lower():find("terror") then
-                    terrorHubWindow = gui
-                    break
-                end
-            end
-        end
-    end)
-    
-    if not success then
-        print("❌ فشل تحميل Terror-Hub: " .. tostring(err))
-    end
-end
-
--- ===== نظام اكتشاف وإزالة العوائق =====
-local function findAndRemoveObstacles()
-    local playerPos = rootPart.Position
+-- ===== نظام اكتشاف وإزالة العوائق (الوحوش فقط) =====
+local function removeMonstersOnly()
     local removedCount = 0
     
     for _, obj in ipairs(workspace:GetDescendants()) do
+        -- فقط الكائنات التي تحتوي على Humanoid وليست اللاعب
         if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj ~= character then
-            obj:Destroy()
-            removedCount = removedCount + 1
-        elseif obj:IsA("Part") and (obj.Name:lower():find("water") or obj.Name:lower():find("تسونامي") or obj.Name:lower():find("wave")) then
-            if (obj.Position - playerPos).Magnitude < 100 then
+            -- التأكد أنه ليس اللاعب
+            if obj.Name ~= player.Name and obj:FindFirstChild("HumanoidRootPart") then
                 obj:Destroy()
                 removedCount = removedCount + 1
-            end
-        elseif obj:IsA("Part") and (obj.Name:lower():find("ball") or obj.Name:lower():find("كرة") or obj.Shape == Enum.PartType.Ball) then
-            if (obj.Position - playerPos).Magnitude < 50 then
-                obj:Destroy()
-                removedCount = removedCount + 1
-            end
-        elseif obj:IsA("Part") and (obj.Name:lower():find("door") or obj.Name:lower():find("باب")) then
-            if obj:FindFirstChild("ClickDetector") or obj:FindFirstChild("ProximityPrompt") then
-                obj:Destroy()
-                removedCount = removedCount + 1
+                print("🗑️ تم إزالة وحش: " .. obj.Name)
             end
         end
     end
     
     if removedCount > 0 then
-        print("🗑️ تم إزالة " .. removedCount .. " عائق")
+        print("✅ تم إزالة " .. removedCount .. " وحش/وحوش")
+        statusLabel.Text = "🗑️ تم إزالة " .. removedCount .. " وحش"
+    else
+        statusLabel.Text = "✅ لا توجد وحوش للإزالة"
     end
     return removedCount
 end
@@ -92,11 +48,8 @@ local function startRecording()
     if isRecording then return end
     recordedPath = {}
     isRecording = true
+    statusLabel.Text = "⏺ جاري التسجيل..."
     print("⏺ بدء التسجيل...")
-    
-    if removeObstacles then
-        findAndRemoveObstacles()
-    end
     
     local conn = game:GetService("RunService").Heartbeat:Connect(function()
         if isRecording then
@@ -104,9 +57,6 @@ local function startRecording()
                 pos = rootPart.Position,
                 cf = rootPart.CFrame
             })
-            if removeObstacles then
-                findAndRemoveObstacles()
-            end
         else
             conn:Disconnect()
         end
@@ -114,14 +64,13 @@ local function startRecording()
     
     task.wait(recordDuration)
     isRecording = false
-    print("✅ تم التسجيل ("..#recordedPath.." نقطة)")
     statusLabel.Text = "✅ تم التسجيل ("..#recordedPath.." نقطة)"
+    print("✅ تم التسجيل ("..#recordedPath.." نقطة)")
 end
 
 -- ===== دوال إعادة التشغيل =====
 local function startReplay()
     if #recordedPath == 0 then
-        print("❌ لا يوجد مسار مسجل!")
         statusLabel.Text = "❌ لا يوجد مسار مسجل!"
         return
     end
@@ -129,25 +78,18 @@ local function startReplay()
     
     isReplaying = true
     replayIndex = 1
-    print("🔄 بدء إعادة التشغيل (سرعة x" .. replaySpeed .. ")")
     statusLabel.Text = "🔄 جاري إعادة التحركات (سرعة x" .. replaySpeed .. ")"
-    
-    if humanoid then
-        humanoid.WalkSpeed = humanoid.WalkSpeed * replaySpeed
-    end
+    print("🔄 بدء إعادة التشغيل بسرعة: " .. replaySpeed)
     
     game:GetService("RunService").Heartbeat:Connect(function()
         if isReplaying and replayIndex <= #recordedPath then
             rootPart.CFrame = recordedPath[replayIndex].cf
             replayIndex = replayIndex + 1
-            if removeObstacles then
-                findAndRemoveObstacles()
-            end
         elseif isReplaying and replayIndex > #recordedPath then
             isReplaying = false
             winsCount = winsCount + 1
-            print("🏆 انتصار #" .. winsCount)
             statusLabel.Text = "🏆 انتصار #" .. winsCount
+            print("🏆 انتصار #" .. winsCount)
             if isLooping then
                 task.wait(0.5)
                 replayIndex = 1
@@ -164,27 +106,26 @@ local function togglePerformance()
     isPerformanceMode = not isPerformanceMode
     if isPerformanceMode then
         settings().Rendering.QualityLevel = 1
-        print("⚡ وضع الأداء مفعل (60 فريم)")
         statusLabel.Text = "⚡ وضع الأداء مفعل (60 فريم)"
     else
         settings().Rendering.QualityLevel = 4
-        print("⚡ وضع الأداء معطل")
         statusLabel.Text = "⚡ وضع الأداء معطل"
     end
 end
 
--- ===== إنشاء الواجهة الرئيسية =====
+-- ===== إنشاء الواجهة (مناسبة للجوال) =====
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "DeltaGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
+-- النافذة الرئيسية (أصغر حجمًا)
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 360, 0, 620)
-frame.Position = UDim2.new(0.5, -180, 0.5, -310)
+frame.Size = UDim2.new(0, 300, 0, 480)
+frame.Position = UDim2.new(0.5, -150, 0.5, -240)
 frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 frame.BackgroundTransparency = 0.1
-frame.BorderSizePixel = 1
+frame.BorderSizePixel = 2
 frame.BorderColor3 = Color3.fromRGB(255, 255, 255)
 frame.Parent = screenGui
 
@@ -192,9 +133,9 @@ local corners = Instance.new("UICorner")
 corners.CornerRadius = UDim.new(0, 12)
 corners.Parent = frame
 
--- شريط العنوان
+-- شريط العنوان (للسحب باللمس)
 local titleBar = Instance.new("Frame")
-titleBar.Size = UDim2.new(1, 0, 0, 40)
+titleBar.Size = UDim2.new(1, 0, 0, 45)
 titleBar.Position = UDim2.new(0, 0, 0, 0)
 titleBar.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 titleBar.BackgroundTransparency = 0.2
@@ -205,37 +146,38 @@ local titleBarCorner = Instance.new("UICorner")
 titleBarCorner.CornerRadius = UDim.new(0, 12)
 titleBarCorner.Parent = titleBar
 
+-- عنوان
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -60, 1, 0)
+title.Size = UDim2.new(1, -70, 1, 0)
 title.Position = UDim2.new(0, 10, 0, 0)
-title.Text = "⚡ Delta Recorder v12"
+title.Text = "⚡ Delta Recorder"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.BackgroundTransparency = 1
 title.Font = Enum.Font.GothamBold
-title.TextSize = 18
+title.TextSize = 16
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = titleBar
 
--- زر الإغلاق
+-- زر الإغلاق (كبير وواضح)
 local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 30, 0, 30)
-closeBtn.Position = UDim2.new(1, -35, 0, 5)
+closeBtn.Size = UDim2.new(0, 40, 0, 35)
+closeBtn.Position = UDim2.new(1, -45, 0, 5)
 closeBtn.Text = "✕"
 closeBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
 closeBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 18
+closeBtn.TextSize = 20
 closeBtn.BorderSizePixel = 0
 closeBtn.Parent = titleBar
 
--- أيقونة مصغرة
+-- أيقونة مصغرة (أكبر للجوال)
 local miniIcon = Instance.new("ImageButton")
-miniIcon.Size = UDim2.new(0, 50, 0, 50)
+miniIcon.Size = UDim2.new(0, 60, 0, 60)
 miniIcon.Position = UDim2.new(0, 10, 0, 10)
 miniIcon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 miniIcon.Image = "rbxassetid://4483345998"
 miniIcon.Visible = false
-miniIcon.BorderSizePixel = 1
+miniIcon.BorderSizePixel = 2
 miniIcon.BorderColor3 = Color3.fromRGB(0, 0, 0)
 miniIcon.Parent = screenGui
 
@@ -243,28 +185,42 @@ local miniCorners = Instance.new("UICorner")
 miniCorners.CornerRadius = UDim.new(1, 0)
 miniCorners.Parent = miniIcon
 
--- وظيفة السحب
+-- ===== وظيفة السحب (باللمس والفأرة) =====
 local dragging = false
 local dragStart, startPos
 
+local function startDrag(input)
+    dragging = true
+    dragStart = input.Position
+    startPos = frame.Position
+end
+
+local function updateDrag(input)
+    if dragging then
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end
+
+local function endDrag(input)
+    dragging = false
+end
+
 titleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = frame.Position
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        startDrag(input)
     end
 end)
 
 titleBar.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - dragStart
-        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        updateDrag(input)
     end
 end)
 
 titleBar.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        endDrag(input)
     end
 end)
 
@@ -314,78 +270,50 @@ speedBox.FocusLost:Connect(function(enterPressed)
         local newSpeed = tonumber(speedBox.Text)
         if newSpeed and newSpeed > 0 then
             replaySpeed = newSpeed
-            statusLabel.Text = "⚡ السرعة مضبوطة: x" .. replaySpeed
-            print("⚡ السرعة مضبوطة على: " .. replaySpeed)
+            statusLabel.Text = "⚡ السرعة: x" .. replaySpeed
         else
             speedBox.Text = tostring(replaySpeed)
         end
     end
 end)
 
-yOffset = yOffset + 45
+yOffset = yOffset + 42
 
--- أزرار التحكم
-createButton("▶ بدء التسجيل", yOffset, Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0), startRecording)
-yOffset = yOffset + 40
+-- أزرار التحكم (بحجم مناسب للجوال)
+createButton("▶ تسجيل", yOffset, Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0), startRecording)
+yOffset = yOffset + 38
 
-createButton("🔄 تشغيل المسار", yOffset, Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0), startReplay)
-yOffset = yOffset + 40
+createButton("🔄 تشغيل", yOffset, Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0), startReplay)
+yOffset = yOffset + 38
 
-local loopBtn = createButton("♾ وضع التكرار (إيقاف)", yOffset, Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0), function()
+local loopBtn = createButton("♾ تكرار (إيقاف)", yOffset, Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0), function()
     isLooping = not isLooping
-    loopBtn.Text = isLooping and "♾ وضع التكرار (تشغيل)" or "♾ وضع التكرار (إيقاف)"
+    loopBtn.Text = isLooping and "♾ تكرار (تشغيل)" or "♾ تكرار (إيقاف)"
     loopBtn.BackgroundColor3 = isLooping and Color3.fromRGB(200, 200, 200) or Color3.fromRGB(255, 255, 255)
-    statusLabel.Text = isLooping and "♾ التكرار اللا نهائي مفعل" or "⏸ تم إيقاف التكرار"
+    statusLabel.Text = isLooping and "♾ تكرار مفعل" or "⏸ تكرار معطل"
 end)
-yOffset = yOffset + 40
+yOffset = yOffset + 38
+
+-- زر إزالة الوحوش (وليس كل العوائق)
+local removeBtn = createButton("🗑️ إزالة الوحوش", yOffset, Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0), function()
+    removeMonstersOnly()
+end)
+yOffset = yOffset + 38
+
+createButton("⚡ تحسين الأداء", yOffset, Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0), function()
+    togglePerformance()
+end)
+yOffset = yOffset + 38
 
 createButton("⏹ إيقاف الكل", yOffset, Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0), function()
     isRecording = false
     isReplaying = false
     isLooping = false
-    loopBtn.Text = "♾ وضع التكرار (إيقاف)"
+    loopBtn.Text = "♾ تكرار (إيقاف)"
     loopBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    statusLabel.Text = "⏹ تم الإيقاف الكامل"
-    print("⏹ تم الإيقاف الكامل")
+    statusLabel.Text = "⏹ تم الإيقاف"
 end)
-yOffset = yOffset + 40
-
--- زر إزالة العوائق
-local removeBtn = createButton("🗑️ إزالة العوائق (إيقاف)", yOffset, Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0), function()
-    removeObstacles = not removeObstacles
-    removeBtn.Text = removeObstacles and "🗑️ إزالة العوائق (تشغيل)" or "🗑️ إزالة العوائق (إيقاف)"
-    removeBtn.BackgroundColor3 = removeObstacles and Color3.fromRGB(200, 200, 200) or Color3.fromRGB(255, 255, 255)
-    statusLabel.Text = removeObstacles and "🗑️ إزالة العوائق مفعلة" or "⏸ إزالة العوائق معطلة"
-    if removeObstacles then
-        findAndRemoveObstacles()
-    end
-end)
-yOffset = yOffset + 40
-
--- زر تحسين الأداء
-local perfBtn = createButton("⚡ تحسين الأداء (إيقاف)", yOffset, Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0), function()
-    togglePerformance()
-    perfBtn.Text = isPerformanceMode and "⚡ تحسين الأداء (تشغيل)" or "⚡ تحسين الأداء (إيقاف)"
-    perfBtn.BackgroundColor3 = isPerformanceMode and Color3.fromRGB(200, 200, 200) or Color3.fromRGB(255, 255, 255)
-end)
-yOffset = yOffset + 40
-
--- زر Terror-Hub
-local terrorBtn = createButton("🌀 تشغيل Terror-Hub", yOffset, Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0), function()
-    loadTerrorHub()
-    statusLabel.Text = "🌀 جاري تحميل Terror-Hub..."
-    task.wait(1)
-    statusLabel.Text = "✅ تم تحميل Terror-Hub"
-end)
-yOffset = yOffset + 40
-
--- زر مسح المسار
-createButton("🗑️ مسح المسار المسجل", yOffset, Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0), function()
-    recordedPath = {}
-    statusLabel.Text = "🗑️ تم مسح المسار"
-    print("🗑️ تم مسح المسار")
-end)
-yOffset = yOffset + 40
+yOffset = yOffset + 38
 
 -- حالة النص
 local statusLabel = Instance.new("TextLabel")
@@ -409,4 +337,4 @@ miniIcon.MouseButton1Click:Connect(function()
     miniIcon.Visible = false
 end)
 
-print("⚡ Delta Recorder v12.0 جاهز! جميع الأوامر تعمل.")
+print("⚡ Delta Recorder v13.0 جاهز (نسخة الجوال)")
