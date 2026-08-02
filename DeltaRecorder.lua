@@ -1,4 +1,4 @@
--- [[ Delta Stage 15 Auto-Recorder v5.0 - مع خاصية السرعة ]]
+-- [[ Delta Stage 15 Auto-Recorder v6.0 - التحديث الكبير ]]
 -- صنع خصيصًا لأمر المستخدم
 
 local player = game.Players.LocalPlayer
@@ -14,37 +14,64 @@ local isLooping = false
 local replayIndex = 1
 local recordDuration = 60
 local winsCount = 0
-local replaySpeed = 1 -- مضاعف السرعة (1 = سرعة عادية)
+local replaySpeed = 1
+local isPerformanceMode = false -- وضع الأداء
 
--- ===== إنشاء الواجهة =====
+-- ===== إنشاء الواجهة الرئيسية (قابلة للسحب) =====
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "DeltaGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 320, 0, 480)
-frame.Position = UDim2.new(0.5, -160, 0.5, -240)
-frame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-frame.BackgroundTransparency = 0.1
+frame.Size = UDim2.new(0, 350, 0, 520)
+frame.Position = UDim2.new(0.5, -175, 0.5, -260)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+frame.BackgroundTransparency = 0.05
 frame.BorderSizePixel = 0
 frame.Parent = screenGui
 
+-- زوايا دائرية
 local corners = Instance.new("UICorner")
 corners.CornerRadius = UDim.new(0, 12)
 corners.Parent = frame
 
--- ===== زر الإغلاق (X) =====
+-- شريط العنوان (للسحب)
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 35)
+titleBar.Position = UDim2.new(0, 0, 0, 0)
+titleBar.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+titleBar.BackgroundTransparency = 0.2
+titleBar.BorderSizePixel = 0
+titleBar.Parent = frame
+
+local titleBarCorner = Instance.new("UICorner")
+titleBarCorner.CornerRadius = UDim.new(0, 12)
+titleBarCorner.Parent = titleBar
+
+-- عنوان
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -50, 1, 0)
+title.Position = UDim2.new(0, 10, 0, 0)
+title.Text = "⚡ Delta Recorder ⚡"
+title.TextColor3 = Color3.fromRGB(255, 200, 50)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = titleBar
+
+-- زر الإغلاق (X)
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.new(0, 30, 0, 30)
-closeBtn.Position = UDim2.new(1, -35, 0, 5)
+closeBtn.Position = UDim2.new(1, -35, 0, 2)
 closeBtn.Text = "✕"
 closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 closeBtn.Font = Enum.Font.GothamBold
 closeBtn.TextSize = 18
 closeBtn.BorderSizePixel = 0
-closeBtn.Parent = frame
+closeBtn.Parent = titleBar
 
 -- ===== أيقونة مصغرة =====
 local miniIcon = Instance.new("ImageButton")
@@ -60,21 +87,52 @@ local miniCorners = Instance.new("UICorner")
 miniCorners.CornerRadius = UDim.new(1, 0)
 miniCorners.Parent = miniIcon
 
--- ===== عنوان =====
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -40, 0, 40)
-title.Position = UDim2.new(0, 0, 0, 0)
-title.Text = "⚡ Delta Recorder ⚡"
-title.TextColor3 = Color3.fromRGB(255, 200, 50)
-title.BackgroundTransparency = 1
-title.Font = Enum.Font.GothamBold
-title.TextSize = 20
-title.Parent = frame
+-- ===== وظيفة السحب =====
+local dragging = false
+local dragStart, startPos
 
--- ===== حقل إدخال السرعة =====
+titleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+    end
+end)
+
+titleBar.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+titleBar.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+-- ===== عناصر التحكم =====
+local yOffset = 50
+local function createButton(text, yPos, color, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.8, 0, 0, 35)
+    btn.Position = UDim2.new(0.1, 0, 0, yPos)
+    btn.Text = text
+    btn.BackgroundColor3 = color
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 14
+    btn.BorderSizePixel = 0
+    btn.Parent = frame
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+-- حقل السرعة
 local speedLabel = Instance.new("TextLabel")
-speedLabel.Size = UDim2.new(0.4, 0, 0, 30)
-speedLabel.Position = UDim2.new(0.05, 0, 0.12, 0)
+speedLabel.Size = UDim2.new(0.3, 0, 0, 30)
+speedLabel.Position = UDim2.new(0.05, 0, 0, yOffset)
 speedLabel.Text = "السرعة:"
 speedLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 speedLabel.BackgroundTransparency = 1
@@ -84,7 +142,7 @@ speedLabel.Parent = frame
 
 local speedBox = Instance.new("TextBox")
 speedBox.Size = UDim2.new(0.4, 0, 0, 30)
-speedBox.Position = UDim2.new(0.5, 0, 0.12, 0)
+speedBox.Position = UDim2.new(0.5, 0, 0, yOffset)
 speedBox.Text = "1"
 speedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 speedBox.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
@@ -93,84 +151,89 @@ speedBox.TextSize = 14
 speedBox.BorderSizePixel = 0
 speedBox.Parent = frame
 
--- ===== أزرار التحكم =====
-local startBtn = Instance.new("TextButton")
-startBtn.Size = UDim2.new(0.8, 0, 0, 40)
-startBtn.Position = UDim2.new(0.1, 0, 0.22, 0)
-startBtn.Text = "▶ بدء التسجيل"
-startBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-startBtn.Font = Enum.Font.GothamBold
-startBtn.TextSize = 16
-startBtn.BorderSizePixel = 0
-startBtn.Parent = frame
+yOffset = yOffset + 45
 
-local replayBtn = Instance.new("TextButton")
-replayBtn.Size = UDim2.new(0.8, 0, 0, 40)
-replayBtn.Position = UDim2.new(0.1, 0, 0.38, 0)
-replayBtn.Text = "🔄 تشغيل المسار"
-replayBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
-replayBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-replayBtn.Font = Enum.Font.GothamBold
-replayBtn.TextSize = 16
-replayBtn.BorderSizePixel = 0
-replayBtn.Parent = frame
+-- أزرار التحكم
+local startBtn = createButton("▶ بدء التسجيل", yOffset, Color3.fromRGB(0, 200, 100), function()
+    startRecording()
+end)
+yOffset = yOffset + 45
 
-local loopBtn = Instance.new("TextButton")
-loopBtn.Size = UDim2.new(0.8, 0, 0, 40)
-loopBtn.Position = UDim2.new(0.1, 0, 0.54, 0)
-loopBtn.Text = "♾ وضع التكرار (إيقاف)"
-loopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-loopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-loopBtn.Font = Enum.Font.GothamBold
-loopBtn.TextSize = 16
-loopBtn.BorderSizePixel = 0
-loopBtn.Parent = frame
+local replayBtn = createButton("🔄 تشغيل المسار", yOffset, Color3.fromRGB(0, 150, 255), function()
+    startReplay()
+end)
+yOffset = yOffset + 45
 
-local stopBtn = Instance.new("TextButton")
-stopBtn.Size = UDim2.new(0.8, 0, 0, 40)
-stopBtn.Position = UDim2.new(0.1, 0, 0.70, 0)
-stopBtn.Text = "⏹ إيقاف الكل"
-stopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-stopBtn.Font = Enum.Font.GothamBold
-stopBtn.TextSize = 16
-stopBtn.BorderSizePixel = 0
-stopBtn.Parent = frame
+local loopBtn = createButton("♾ وضع التكرار (إيقاف)", yOffset, Color3.fromRGB(200, 50, 50), function()
+    isLooping = not isLooping
+    loopBtn.Text = isLooping and "♾ وضع التكرار (تشغيل)" or "♾ وضع التكرار (إيقاف)"
+    loopBtn.BackgroundColor3 = isLooping and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(200, 50, 50)
+    statusLabel.Text = isLooping and "♾ التكرار اللا نهائي مفعل" or "⏸ تم إيقاف التكرار"
+end)
+yOffset = yOffset + 45
 
--- ===== حالة النص =====
+local stopBtn = createButton("⏹ إيقاف الكل", yOffset, Color3.fromRGB(200, 50, 50), function()
+    isRecording = false
+    isReplaying = false
+    isLooping = false
+    loopBtn.Text = "♾ وضع التكرار (إيقاف)"
+    loopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    statusLabel.Text = "⏹ تم الإيقاف الكامل"
+    print("[Delta] إيقاف كامل")
+end)
+yOffset = yOffset + 45
+
+-- زر تحسين الأداء
+local perfBtn = createButton("⚡ تحسين الأداء (إيقاف)", yOffset, Color3.fromRGB(100, 100, 200), function()
+    isPerformanceMode = not isPerformanceMode
+    perfBtn.Text = isPerformanceMode and "⚡ تحسين الأداء (تشغيل)" or "⚡ تحسين الأداء (إيقاف)"
+    perfBtn.BackgroundColor3 = isPerformanceMode and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(100, 100, 200)
+    if isPerformanceMode then
+        setfpscap(60)
+        settings().Rendering.QualityLevel = 1
+        statusLabel.Text = "⚡ وضع الأداء مفعل (60 فريم)"
+    else
+        setfpscap(0)
+        settings().Rendering.QualityLevel = 4
+        statusLabel.Text = "⚡ وضع الأداء معطل"
+    end
+end)
+yOffset = yOffset + 45
+
+-- زر مسح المسار
+local clearBtn = createButton("🗑 مسح المسار المسجل", yOffset, Color3.fromRGB(150, 50, 50), function()
+    recordedPath = {}
+    statusLabel.Text = "🗑 تم مسح المسار"
+    print("[Delta] مسح المسار")
+end)
+yOffset = yOffset + 45
+
+-- زر عرض الإحصائيات
+local statsBtn = createButton("📊 عرض الإحصائيات", yOffset, Color3.fromRGB(50, 150, 200), function()
+    statusLabel.Text = "📊 النقاط: " .. #recordedPath .. " | الانتصارات: " .. winsCount
+end)
+yOffset = yOffset + 45
+
+-- حالة النص
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, 0, 0, 30)
-statusLabel.Position = UDim2.new(0, 0, 0.88, 0)
+statusLabel.Position = UDim2.new(0, 0, 0, yOffset + 10)
 statusLabel.Text = "⏸ في الانتظار..."
 statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Font = Enum.Font.Gotham
-statusLabel.TextSize = 14
+statusLabel.TextSize = 13
 statusLabel.Parent = frame
 
--- ===== وظائف التحكم في الإغلاق =====
-closeBtn.MouseButton1Click:Connect(function()
-    frame.Visible = false
-    miniIcon.Visible = true
-end)
-
-miniIcon.MouseButton1Click:Connect(function()
-    frame.Visible = true
-    miniIcon.Visible = false
-end)
-
--- ===== تحديث السرعة من حقل الإدخال =====
+-- ===== تحديث السرعة =====
 speedBox.FocusLost:Connect(function(enterPressed)
     if enterPressed then
         local newSpeed = tonumber(speedBox.Text)
         if newSpeed and newSpeed > 0 then
             replaySpeed = newSpeed
             statusLabel.Text = "⚡ السرعة مضبوطة: x" .. replaySpeed
-            print("[Delta] السرعة مضبوطة على: " .. replaySpeed)
         else
             speedBox.Text = tostring(replaySpeed)
-            statusLabel.Text = "⚠️ أدخل رقماً صحيحاً (مثال: 2)"
         end
     end
 end)
@@ -201,7 +264,7 @@ local function startRecording()
     print("[Delta] انتهى التسجيل، النقاط: "..#recordedPath)
 end
 
--- ===== دوال إعادة التشغيل مع السرعة =====
+-- ===== دوال إعادة التشغيل المحسنة =====
 local function startReplay()
     if #recordedPath == 0 then
         statusLabel.Text = "❌ لا يوجد مسار مسجل!"
@@ -212,7 +275,6 @@ local function startReplay()
     statusLabel.Text = "🔄 جاري إعادة التحركات (سرعة x" .. replaySpeed .. ")"
     print("[Delta] بدء إعادة التشغيل بسرعة: " .. replaySpeed)
 
-    -- تطبيق السرعة على الـ Humanoid
     if humanoid then
         humanoid.WalkSpeed = humanoid.WalkSpeed * replaySpeed
     end
@@ -222,14 +284,12 @@ local function startReplay()
 
     game:GetService("RunService").Heartbeat:Connect(function()
         if isReplaying and replayIndex <= #recordedPath then
-            -- تطبيق السرعة عبر تكرار الخطوات أسرع
             for _ = 1, math.floor(speedFactor) do
                 if replayIndex <= #recordedPath then
                     rootPart.CFrame = recordedPath[replayIndex].cf
                     replayIndex = replayIndex + 1
                 end
             end
-            -- التعامل مع الكسور (سرعة غير صحيحة)
             if speedFactor % 1 > 0 then
                 step = step + speedFactor % 1
                 if step >= 1 then
@@ -243,44 +303,40 @@ local function startReplay()
         elseif isReplaying and replayIndex > #recordedPath then
             isReplaying = false
             winsCount = winsCount + 1
-            statusLabel.Text = "🏆 انتصار #" .. winsCount .. " - إعادة تشغيل..."
+            statusLabel.Text = "🏆 انتصار #" .. winsCount .. " - إعادة تشغيل تلقائي..."
             print("[Delta] انتصار #" .. winsCount)
 
             if isLooping then
-                task.wait(1)
+                task.wait(0.5) -- تقليل وقت الانتظار للسلاسة
                 startReplay()
             else
-                statusLabel.Text = "⏸ انتهى المسار (ضع loop للتكرار)"
+                statusLabel.Text = "⏸ انتهى المسار. شغّل Loop للتكرار."
             end
         end
     end)
 end
 
--- ===== ربط الأزرار =====
-startBtn.MouseButton1Click:Connect(startRecording)
-replayBtn.MouseButton1Click:Connect(startReplay)
+-- ===== وظائف الإغلاق =====
+closeBtn.MouseButton1Click:Connect(function()
+    frame.Visible = false
+    miniIcon.Visible = true
+end)
 
-loopBtn.MouseButton1Click:Connect(function()
-    isLooping = not isLooping
-    if isLooping then
-        loopBtn.Text = "♾ وضع التكرار (تشغيل)"
-        loopBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-        statusLabel.Text = "♾ التكرار اللا نهائي مفعل"
+miniIcon.MouseButton1Click:Connect(function()
+    frame.Visible = true
+    miniIcon.Visible = false
+end)
+
+-- ===== دالة تحسين الأداء =====
+local function setfpscap(fps)
+    if fps == 0 then
+        game:GetService("RunService").RenderStepped:Wait()
     else
-        loopBtn.Text = "♾ وضع التكرار (إيقاف)"
-        loopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-        statusLabel.Text = "⏸ تم إيقاف التكرار"
+        local fpsWait = 1 / fps
+        local _ = game:GetService("RunService").RenderStepped:Connect(function()
+            task.wait(fpsWait)
+        end)
     end
-end)
+end
 
-stopBtn.MouseButton1Click:Connect(function()
-    isRecording = false
-    isReplaying = false
-    isLooping = false
-    loopBtn.Text = "♾ وضع التكرار (إيقاف)"
-    loopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    statusLabel.Text = "⏹ تم الإيقاف الكامل"
-    print("[Delta] إيقاف كامل")
-end)
-
-print("[Delta] السكربت جاهز مع خاصية السرعة!")
+print("[Delta] السكربت جاهز! انتظر أوامرك يا سيدي.")
